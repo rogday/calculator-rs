@@ -4,7 +4,7 @@ enum Associativity {
     Right,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, enum_map::Enum, Debug)]
 enum Control {
     EndExpr,
     Join,
@@ -12,7 +12,7 @@ enum Control {
     CloseBracket,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, enum_map::Enum, Debug)]
 enum Math {
     Add,
     Sub,
@@ -29,9 +29,9 @@ enum OperationType {
 }
 
 struct Op {
-    arity:         usize,
-    precedence:    u8,
-    associativity: Associativity,
+    arity:      usize,
+    precedence: u8,
+    assoc:      Associativity,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -48,43 +48,31 @@ enum EvalError {
     LogicError,
 }
 
-fn operator_lookup(op: &OperationType) -> Op {
-    match op {
-        OperationType::Control(ctrl) => match ctrl {
-            Control::Join => {
-                Op { arity: 2, precedence: 6, associativity: Associativity::Left }
-            }
-            Control::EndExpr => {
-                Op { arity: 0, precedence: 0, associativity: Associativity::Left }
-            }
-            Control::CloseBracket => {
-                Op { arity: 0, precedence: 1, associativity: Associativity::Left }
-            }
-            Control::OpenBracket => {
-                Op { arity: 0, precedence: 7, associativity: Associativity::Left }
-            }
-        },
+lazy_static::lazy_static! {
+    static ref CONTROL: enum_map::EnumMap<Control, Op> = enum_map::enum_map! {
+        Control::Join         => Op { arity: 2, precedence: 6, assoc: Associativity::Left },
+        Control::EndExpr      => Op { arity: 0, precedence: 0, assoc: Associativity::Left },
+        Control::CloseBracket => Op { arity: 0, precedence: 1, assoc: Associativity::Left },
+        Control::OpenBracket  => Op { arity: 0, precedence: 7, assoc: Associativity::Left },
+    };
+}
 
-        OperationType::Math(math) => match math {
-            Math::Add => {
-                Op { arity: 2, precedence: 2, associativity: Associativity::Left }
-            }
-            Math::Sub => {
-                Op { arity: 2, precedence: 2, associativity: Associativity::Left }
-            }
-            Math::Mul => {
-                Op { arity: 2, precedence: 3, associativity: Associativity::Left }
-            }
-            Math::Div => {
-                Op { arity: 2, precedence: 3, associativity: Associativity::Left }
-            }
-            Math::Pow => {
-                Op { arity: 2, precedence: 4, associativity: Associativity::Right }
-            }
-            Math::UnaryMinus => {
-                Op { arity: 1, precedence: 5, associativity: Associativity::Right }
-            }
-        },
+lazy_static::lazy_static! {
+    static ref MATH: enum_map::EnumMap<Math, Op> = enum_map::enum_map! {
+        Math::Add        => Op { arity: 2, precedence: 2, assoc: Associativity::Left },
+        Math::Sub        => Op { arity: 2, precedence: 2, assoc: Associativity::Left },
+        Math::Mul        => Op { arity: 2, precedence: 3, assoc: Associativity::Left },
+        Math::Div        => Op { arity: 2, precedence: 3, assoc: Associativity::Left },
+        Math::Pow        => Op { arity: 2, precedence: 4, assoc: Associativity::Right },
+        Math::UnaryMinus => Op { arity: 1, precedence: 5, assoc: Associativity::Right },
+
+    };
+}
+
+fn operator_lookup(op: &OperationType) -> &Op {
+    match op {
+        OperationType::Control(ctrl) => &CONTROL[*ctrl],
+        OperationType::Math(math) => &MATH[*math],
     }
 }
 
@@ -99,12 +87,12 @@ fn eval(bytecode: &[Token]) -> Result<f64, EvalError> {
             Token::Number(number) => numbers.push(*number),
             Token::Operation(op) => {
                 while let Some(prev_op) = operators.last() {
-                    // NOTE: >= is right associativity, then > should be left
+                    // NOTE: >= is right assoc, then > should be left
                     let op_info = operator_lookup(op);
                     let prev_op_info = operator_lookup(prev_op);
 
                     if op_info.precedence > prev_op_info.precedence
-                        || prev_op_info.associativity == Associativity::Right
+                        || prev_op_info.assoc == Associativity::Right
                             && op_info.precedence == prev_op_info.precedence
                     {
                         break;
@@ -159,25 +147,32 @@ mod tests {
         assert!((a - b).abs() < EPS)
     }
 
-    // #[test]
-    // fn precedence_test() {
-    //     use super::Control::*;
-    //     use super::Math::*;
-    //     use super::OperationKind::*;
-    //     use super::Token::*;
+    #[test]
+    fn precedence_test() {
+        use super::{Control::*, Math::*, Token::*, *};
 
-    //     let tokens = vec![
-    //         Number(2.),
-    //         Operation(Math(Pow)),
-    //         Number(3.),
-    //         Operation(Math(Pow)),
-    //         Operation(Math(UnaryMinus)),
-    //         Number(2.),
-    //         Operation(Control(EndExpr)),
-    //     ];
+        let tokens = vec![
+            Operation(OperationType::Control(OpenBracket)),
+            Number(4.),
+            Operation(OperationType::Control(Join)),
+            Number(3.),
+            Operation(OperationType::Control(CloseBracket)),
+            Operation(OperationType::Math(Add)),
+            Operation(OperationType::Math(UnaryMinus)),
+            Number(2.),
+            Operation(OperationType::Math(Div)),
+            Number(0.5),
+            Operation(OperationType::Math(Mul)),
+            Number(2.),
+            Operation(OperationType::Math(Sub)),
+            Number(0.0),
+            Operation(OperationType::Math(Pow)),
+            Number(0.0),
+            Operation(OperationType::Control(EndExpr)),
+        ];
 
-    //     assert_approx(super::eval(&tokens), 2f64.powf(3f64.powf(-2f64)));
-    // }
+        assert_approx(super::eval(&tokens).unwrap(), (43.) + -2. / 0.5 * 2. - 0f64.powf(0.));
+    }
 }
 
 fn main() {
@@ -187,22 +182,9 @@ fn main() {
 
     //let string = std::env::args().skip(1).take(1).next().unwrap();
     let tokens = vec![
-        Operation(OperationType::Control(OpenBracket)),
-        Number(4.),
-        Operation(OperationType::Control(Join)),
-        Number(3.),
-        Operation(OperationType::Control(CloseBracket)),
-        Operation(OperationType::Math(Add)),
-        Operation(OperationType::Math(UnaryMinus)),
-        Number(2.),
-        Operation(OperationType::Math(Div)),
-        Number(0.5),
+        Number(7.),
         Operation(OperationType::Math(Mul)),
-        Number(2.),
-        Operation(OperationType::Math(Sub)),
-        Number(0.0),
-        Operation(OperationType::Math(Pow)),
-        Number(0.0),
+        Number(6.),
         Operation(OperationType::Control(EndExpr)),
     ];
 
