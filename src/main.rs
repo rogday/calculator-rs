@@ -4,7 +4,9 @@ enum Associativity {
     Right,
 }
 
-#[derive(Clone, Copy, enum_map::Enum, Debug)]
+use enum_map::Enum;
+
+#[derive(Clone, Copy, Enum, Debug)]
 enum Control {
     EndExpr,
     Join,
@@ -12,7 +14,7 @@ enum Control {
     CloseBracket,
 }
 
-#[derive(Clone, Copy, enum_map::Enum, Debug)]
+#[derive(Clone, Copy, Enum, Debug)]
 enum Math {
     Add,
     Sub,
@@ -29,9 +31,9 @@ enum OperationType {
 }
 
 struct Op {
-    arity:      usize,
-    precedence: u8,
-    assoc:      Associativity,
+    arity: usize,
+    prec:  u8,
+    assoc: Associativity,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -48,26 +50,33 @@ enum EvalError {
     LogicError,
 }
 
-lazy_static::lazy_static! {
-    static ref CONTROL: enum_map::EnumMap<Control, Op> = enum_map::enum_map! {
-        Control::Join         => Op { arity: 2, precedence: 6, assoc: Associativity::Left },
-        Control::EndExpr      => Op { arity: 0, precedence: 0, assoc: Associativity::Left },
-        Control::CloseBracket => Op { arity: 0, precedence: 1, assoc: Associativity::Left },
-        Control::OpenBracket  => Op { arity: 0, precedence: 7, assoc: Associativity::Left },
-    };
-}
+use enum_map::{enum_map, EnumMap};
+use once_cell::sync::Lazy;
 
-lazy_static::lazy_static! {
-    static ref MATH: enum_map::EnumMap<Math, Op> = enum_map::enum_map! {
-        Math::Add        => Op { arity: 2, precedence: 2, assoc: Associativity::Left },
-        Math::Sub        => Op { arity: 2, precedence: 2, assoc: Associativity::Left },
-        Math::Mul        => Op { arity: 2, precedence: 3, assoc: Associativity::Left },
-        Math::Div        => Op { arity: 2, precedence: 3, assoc: Associativity::Left },
-        Math::Pow        => Op { arity: 2, precedence: 4, assoc: Associativity::Right },
-        Math::UnaryMinus => Op { arity: 1, precedence: 5, assoc: Associativity::Right },
+static CONTROL: Lazy<EnumMap<Control, Op>> = Lazy::new(|| {
+    use Associativity::*;
 
-    };
-}
+    enum_map! {
+        Control::Join         => Op { arity: 2, prec: 6, assoc: Left },
+        Control::EndExpr      => Op { arity: 0, prec: 0, assoc: Left },
+        Control::CloseBracket => Op { arity: 0, prec: 1, assoc: Left },
+        Control::OpenBracket  => Op { arity: 0, prec: 7, assoc: Left },
+    }
+});
+
+static MATH: Lazy<EnumMap<Math, Op>> = Lazy::new(|| {
+    use Associativity::*;
+
+    enum_map! {
+        Math::Add        => Op { arity: 2, prec: 2, assoc: Left },
+        Math::Sub        => Op { arity: 2, prec: 2, assoc: Left },
+        Math::Mul        => Op { arity: 2, prec: 3, assoc: Left },
+        Math::Div        => Op { arity: 2, prec: 3, assoc: Left },
+        Math::Pow        => Op { arity: 2, prec: 4, assoc: Right },
+        Math::UnaryMinus => Op { arity: 1, prec: 5, assoc: Right },
+
+    }
+});
 
 fn operator_lookup(op: &OperationType) -> &Op {
     match op {
@@ -91,9 +100,9 @@ fn eval(bytecode: &[Token]) -> Result<f64, EvalError> {
                     let op_info = operator_lookup(op);
                     let prev_op_info = operator_lookup(prev_op);
 
-                    if op_info.precedence > prev_op_info.precedence
+                    if op_info.prec > prev_op_info.prec
                         || prev_op_info.assoc == Associativity::Right
-                            && op_info.precedence == prev_op_info.precedence
+                            && op_info.prec == prev_op_info.prec
                     {
                         break;
                     }
