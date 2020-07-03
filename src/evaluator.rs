@@ -37,21 +37,27 @@ impl Evaluator {
             OperationType::Control(ctrl) => control::CONTROL[*ctrl],
             OperationType::BuiltinFun(math) => builtins::BUILTINS[*math].op,
 
-            OperationType::Func(Func::FunStart(name)) => {
-                Op { arity: self.functions[*name].arity, prec: 1, assoc: Associativity::Left }
-            }
-            OperationType::Func(Func::FunEnd) => {
-                Op { arity: 0, prec: 7, assoc: Associativity::Left }
-            }
+            OperationType::Func(Func::FunStart(name)) => Op {
+                arity: self.functions[*name].arity,
+                prec:  control::OPEN_BRACKET_PREC,
+                assoc: Associativity::Left,
+            },
 
-            OperationType::Func(Func::Comma) => {
-                Op { arity: 0, prec: 7, assoc: Associativity::Left }
+            OperationType::Func(Func::FunEnd) | OperationType::Func(Func::Comma) => {
+                Op { arity: 0, prec: control::CLOSE_BRACKET_PREC, assoc: Associativity::Left }
             }
         }
     }
 
     pub fn add_fn(&mut self, name: String, arity: usize, f: FunType) {
         self.functions.insert(name, UserFunction { arity, f });
+    }
+
+    fn is_closing(o: &OperationType) -> bool {
+        use control::Control::*;
+        use OperationType::*;
+
+        std::matches!(o, Control(CloseBracket) | Func(operations::Func::FunEnd))
     }
 
     pub fn eval(&self, bytecode: &[Token]) -> Result<f64, EvalError> {
@@ -68,7 +74,6 @@ impl Evaluator {
                         let op_info = self.operator_lookup(op);
                         let prev_op_info = self.operator_lookup(prev_op);
 
-                        //TODO: ) and ( should cancel each other out, same is true for FuncStart and FuncEnd
                         // NOTE: >= is right assoc, then > should be left
                         if op_info.prec > prev_op_info.prec
                             || prev_op_info.assoc == Associativity::Right
@@ -98,7 +103,9 @@ impl Evaluator {
 
                         operators.pop();
                     }
-                    operators.push(op.clone());
+                    if !Evaluator::is_closing(op) {
+                        operators.push(op.clone());
+                    }
                 }
             }
         }

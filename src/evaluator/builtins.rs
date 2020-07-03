@@ -1,7 +1,7 @@
-use super::operations::{Args, Type};
-use super::{Associativity, Op};
+use super::operations::{Args, Associativity, Op, Type};
 
 use enum_map::{enum_map, Enum, EnumMap};
+use num_traits::Pow;
 use once_cell::sync::Lazy;
 
 type F = fn(Args) -> Type;
@@ -45,8 +45,7 @@ macro_rules! make_mapping {
 
 #[rustfmt::skip]
 make_builtin![
-    //TODO: abstract over pow using num crate
-    Pow | a, b | { a.powf(*b) },
+    Pow | a, b | { Pow::pow(a, b) },
     Add | a, b | { a + b },
     Sub | a, b | { a - b },
     Mul | a, b | { a * b },

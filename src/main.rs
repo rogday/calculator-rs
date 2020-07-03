@@ -25,12 +25,12 @@ fn main() {
     let tokens = vec![
         Operation(OperationType::Func(Func::FunStart("Print"))),
         Number(7.),
+        Operation(OperationType::Func(Func::FunEnd)),
         Operation(OperationType::BuiltinFun(InfixOperators::Mul)),
         Number(6.),
-        Operation(OperationType::Func(Func::FunEnd)),
         Operation(OperationType::Control(EndExpr)),
     ];
 
-    eval.eval(&tokens).unwrap();
-    // println!("{:?} = {:?}", tokens, eval.eval(&tokens));
+    // eval.eval(&tokens).unwrap();
+    println!("{:?} = {:?}", tokens, eval.eval(&tokens));
 }
